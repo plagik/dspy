@@ -64,8 +64,8 @@ class Player(FirstPersonController):
         self.patrsh=Text(text=f"{self.invent[0].patr}/∞", position=(-0.8, -0.4))
         self.menu = Entity(parent=camera.ui, model='quad', scale=(0.5, 0.6),color=color.black66, enabled=False)
         self.btn_resume = Button(text='Continue', parent=self.menu, y=0.2, scale=(0.6, 0.1),on_click=lambda:self.imp("escape"))
-        self.txt=Text(position=[-0.15,0.1],text="Difficulty level 5-25",parent=self.menu,scale=[1.5,1.5,1.5])
-        self.painlev=InputField(y=0,limit_content_to="1234567890",color=color.gray ,default_value="10", enabled=False,scale=[0.05,0.05],text_origin=(0, 0),on_click=lambda:setattr(self.painlev,"text",""),submit_on='enter')
+        self.txt=Text(position=[-0.15,0.1],text="Difficulty level 5-20",parent=self.menu,scale=[1.5,1.5,1.5])
+        self.painlev=InputField(y=0,limit_content_to="1234567890",color=color.gray ,default_value="10", enabled=False,scale=[0.05,0.05],text_origin=(0, 0),on_click=self.clear_painlev)
         self.btn_restart =Button(text='Restart', parent=self.menu, y=-0.2, scale=(0.6, 0.1))
         self.reloading_anim = False
         self.jump_height = 0 
@@ -73,6 +73,8 @@ class Player(FirstPersonController):
     def open_shot(self):
         self.shot = True
 
+    def clear_painlev(self):
+        self.painlev.text = ""
     def imp(self, key):
         if key == 'left mouse down'and not self.menu.enabled:
             if self.shot and pausa == False and not self.reloading_anim:
@@ -139,11 +141,7 @@ class Player(FirstPersonController):
             mouse.locked = not self.menu.enabled
             mouse.visible = self.menu.enabled
             player.cursor.enabled = not self.menu.enabled
-        if key=='enter':
-            if self.painlev.text.isdigit():
-                self.levpain = int(self.painlev.text)
-                if self.levpain>=25:self.levpain=25
-                if self.levpain<=5:self.levpain=5
+
         
             
 
@@ -334,6 +332,9 @@ def fire(obj):
         start_pos = camera.world_position + camera.forward * 1.5
         napr = camera.forward
     else:
+        if obj.parent.parent.dead:
+            destroy(obj)
+            return
         start_pos = obj.world_position + (player.position - obj.world_position).normalized() * 1.5
         napr = (camera.world_position - obj.world_position).normalized()
 
@@ -372,17 +373,6 @@ def fire(obj):
 def update():
     global pausa
     if pausa:return
-
-    check_directions = [
-        Vec3(1,0,0), Vec3(-1,0,0), Vec3(0,0,1), Vec3(0,0,-1), 
-        Vec3(1,0,1).normalized(), Vec3(1,0,-1).normalized(), 
-        Vec3(-1,0,1).normalized(), Vec3(-1,0,-1).normalized()
-    ]
-    for d in check_directions:
-        hit = raycast(player.world_position + [0,1,0], d, distance=0.7, ignore=[player]+room[grid_size*grid_size-1].n.children )
-        if hit.hit:
-            overlap = 0.7 - hit.distance
-            player.position -= d * overlap
     dt = time.dt
     for i in bulles[:]:
         step = i.dir * i.speed * dt
@@ -507,8 +497,24 @@ def unpause():
 ap = Ursina()
 
 def input(key):
-    player.imp(key)
-
+    if not pausa:
+        check_directions = [
+        Vec3(1,0,0), Vec3(-1,0,0), Vec3(0,0,1), Vec3(0,0,-1), 
+        Vec3(1,0,1).normalized(), Vec3(1,0,-1).normalized(), 
+        Vec3(-1,0,1).normalized(), Vec3(-1,0,-1).normalized()
+        ]
+        for d in check_directions:
+            hit = raycast(player.world_position + [0,1,0], d, distance=0.7, ignore=[player]+room[grid_size*grid_size-1].n.children )
+            if hit.hit:
+                overlap = 0.7 - hit.distance
+                player.position -= d * overlap
+        if player.painlev.text.isdigit() and player.painlev.enabled:
+            print(1)
+            player.levpain = int(player.painlev.text)
+            if player.levpain>=25:player.levpain=20
+            if player.levpain<=5:player.levpain=5
+        player.imp(key)
+    else:player.imp("escape")
 player = Player(100, name="pel", collider='capsule', height=2, radius=0.5, scale=(1.3, 1.3, 1.3), speed=7, jump_height=3,position=[-8,2,-8],gravity = 0 )
 grid_size = player.levpain
 start_rom=[]
@@ -581,7 +587,7 @@ def reset():
     player.position = (-8, 3, -8)
     player.shp.color=color.red
     player.shp.alpha = 0
-    player.enabled = True
+    player.enabled = False
 
     
     if len(player.invent) > 1:
@@ -589,9 +595,7 @@ def reset():
         player.gun = player.invent[0]
         player.gun.enabled = True
     
-    player.enabled = False
     invoke(set_map, delay=0.1)
-    invoke(lambda: setattr(player, 'enabled', True), delay=1.0) 
     invoke(unpause, delay=1.1)
 def set_map():    
     global room, enemy, item_entities,start,start_rom,start,ground,grid_size
@@ -659,6 +663,7 @@ def set_map():
             vr.world_parent = scene
             enemy.append(vr)
     start_rom=[Surface(rom="armor", position=[-8,0,0]),Surface(rom="armor", position=[-8,0,-8])]
+    player.enabled=True
     for attr in ['text_time', 'stats_text', 'rebtn', 'deadtext']:
         if hasattr(player, attr) and getattr(player, attr) is not None:
             destroy(getattr(player, attr))
